@@ -432,19 +432,28 @@ function saveBest(v) { try { localStorage.setItem('stump.best', v); } catch (e) 
 const BEER_MAX = 6;
 const SOBRIETY = ['SOBER', 'BUZZED', 'TIPSY', 'MERRY', 'DRUNK', 'HAMMERED', 'BLIND'];
 let beers = 0;
-/* grade thresholds shrink — bounded so PERFECT never drops under a frame wide */
-const boozeGrip = () => 1 - Math.min(0.45, beers * 0.075);
+/* Grade bands tighten too, but gently: the shrinking corridor below already
+   does the heavy lifting, and squeezing both hard enough left every late catch
+   stuck on BACKWARDS with no skill gradient left. */
+const boozeGrip = () => 1 - Math.min(0.30, beers * 0.05);
 /* how far the swing marker wanders, as a fraction of the meter */
 const boozeSway = () => beers * 0.020;
-/* and the reachable corridor closes in */
-const boozeReach = () => beers * 2;
+/* And the reachable corridor collapses toward the deadline — this is the big
+   one. Because the hammer is accelerating, losing height costs far more time
+   than it looks: sober you get most of the fall, six deep you get a band just
+   above the dirt worth about a fifth of the window.
+   Not pushed further: below ~10 frames the frames are spaced so far apart in
+   rotation that no grip near true is reachable even frame-perfectly, which
+   flattens every catch to the same mediocre grade. */
+const boozeReach = () => beers * 9;
 /* the only thing you gain: a cut of the score for playing it drunk */
 const boozeBonus = () => 1 + beers * 0.15;
 
 /* The ceiling of the reach creeps down as nails get stubborn, which costs you
    chances rather than reaction time. Bounded so a throw always turns past true
    at least once. */
-const catchTop = () => Math.min(46, 36 + (g.level - 1) * 4) + boozeReach();
+const catchTop = () =>
+  Math.min(118, Math.min(46, 36 + (g.level - 1) * 4) + boozeReach());
 /* Ceiling on how fast it may tumble, so the top grade stays reachable by hand. */
 const spinCap = () => Math.min(16, 13 + (g.level - 1) * 0.6);
 /* Total degrees the hammer should turn while it is catchable. Always more than
@@ -514,7 +523,10 @@ function release() {
   g.power = clamp(g.charge, 0.18, 1);
   const h = g.ham;
   h.x = HAND_X; h.y = HAND_Y;
-  h.vy = -(4.4 + g.power * 0.9);
+  /* A little slop in the throw. Without it, power alone fixes the whole flight
+     and the spin is solved from that flight, so holding the same charge deals
+     the identical set of grip angles every single time. */
+  h.vy = -(4.4 + g.power * 0.9 + rand(-0.22, 0.22));
   h.a = 0;
   // spin is solved from the flight so the catchable stretch turns `sweep` degrees
   const apex = HAND_Y - h.vy * h.vy / (2 * GRAVITY);
@@ -522,11 +534,15 @@ function release() {
   const t1 = Math.sqrt(Math.max(0, 2 * (top - apex) / GRAVITY));
   const t2 = Math.sqrt(2 * (DROP_LINE - apex) / GRAVITY);
   const live = Math.max(8, t2 - t1);
-  /* The cap keeps the top grade reachable, but it must never hold the sweep
-     under a full turn — that would make a throw simply ungrippable. When the
-     geometry is tight (drunk, late nail, hard throw) the floor wins. */
-  const cap = Math.max(spinCap(), 380 / live);
-  h.spin = clamp(sweepFor(g.power) / live, 5, cap) * (Math.random() < 0.5 ? -1 : 1);
+  /* Normally the cap keeps the top grade reachable while a floor guarantees a
+     full turn, so no throw is ungrippable. Once drink has shrunk the corridor
+     to a few frames that promise is geometrically impossible — honouring it
+     would spin the hammer into an unreadable blur — so the floor itself is
+     bounded, and a very drunk throw simply offers whatever arc it offers. */
+  const cap = clamp(380 / live, spinCap(), 17);
+  h.spin = clamp(sweepFor(g.power) / live, 5, cap)
+         * rand(0.93, 1.07)                       // phases the arc differently each throw
+         * (Math.random() < 0.5 ? -1 : 1);
   g.state = S.FLY; g.t = 0; g.tooEarly = 0;
   SFX.throw();
   burst(HAND_X, HAND_Y, 5, [C.white, C.cloudS], 1.2, 14, 0.05);

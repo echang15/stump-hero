@@ -70,10 +70,12 @@ you sober up again. It carries across restarts, so you set it once and it sticks
 
 Each beer does three things:
 
-- **Narrows what counts as a good grip.** Every grade band tightens by 7.5%, to a floor
-  of 55%. The PERFECT catch window goes from about 2 frames wide sober to about 1 at six.
-- **Closes in the reach.** The catch corridor's ceiling drops 2px per beer, so the hammer
-  is catchable for less of its fall and comes round fewer times.
+- **Shrinks the catchable box, hard.** The corridor's ceiling drops 9px per beer. Because
+  the hammer is accelerating by then, height costs far more time than it looks: the window
+  falls from **107px / 685ms sober to 53px / 200ms at six**, about a fifth of what you
+  started with.
+- **Narrows what counts as a good grip.** Every grade band tightens by 5%, to a floor
+  of 70%.
 - **Puts a sway in your swing hand.** The marker on the swing meter stops tracking
   straight and wanders up to 12% of the bar, drifting rather than juddering. Where it
   actually *is* when you press is what counts — so you can read the sway and fight it,
@@ -81,18 +83,25 @@ Each beer does three things:
 
 In exchange you score **+15% per beer**, up to +90%.
 
-Measured against a simulated player with two frames of timing jitter:
+Measured against a simulated player with two frames of timing jitter, playing perfectly
+otherwise:
 
-| Beers | Flush hits | Whiffed swings |
-|---|---|---|
-| 0 | 83% | 0% |
-| 2 | 76% | 1% |
-| 4 | 61% | 4% |
-| 6 | 49% | 8% |
+| Beers | Catch window | Throws offering a usable grip | Lives lost |
+|---|---|---|---|
+| 0 | 685ms | 96% | 3% |
+| 2 | 401ms | 81% | 6% |
+| 4 | 284ms | 56% | 26% |
+| 6 | 200ms | 28% | 28% |
 
-Drinking never makes a throw *impossible*, though. The spin is still solved so that every
-throw turns past a true grip at least once, however many you've had — the hammer just
-gives you less of a moment to take it.
+Sober, a true grip is on the table every single throw and the only question is whether you
+take it. At six, most throws simply don't offer one — you take the least-bad angle in a
+fifth of a second, or you watch it hit the dirt. It stays *possible*: a great catch at six
+beers can still be PERFECT, just rarely.
+
+The corridor is not shrunk any further than this on purpose. Below about ten frames the
+catchable moments are spaced so far apart in rotation that no grip near true exists even
+for a frame-perfect player, and every catch flattens to the same mediocre grade — brutal
+but with no skill in it, which is worse than hard.
 
 ## Hosting
 
