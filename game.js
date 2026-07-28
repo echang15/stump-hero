@@ -24,7 +24,9 @@ const C = {
   pants:'#3a5ad0', pantsD:'#24378a',
   hair:'#6b3f18', boot:'#3a2a1a',
   ink:'#141420', white:'#ffffff', black:'#000000',
-  gold:'#fcd428', bad:'#e04030', good:'#5ce05c', dim:'#6a6a80'
+  gold:'#fcd428', bad:'#e04030', good:'#5ce05c', dim:'#6a6a80',
+  foam:'#fff4d8', foamS:'#ddcea8', beer:'#f0a818', beerD:'#bc7a10',
+  panel:'#232338'
 };
 
 /* ------------------------------------------------------------------ font */
@@ -160,6 +162,22 @@ const HAMMER = sprite([
   '...DDDDDDDD...'
 ], { D: C.ink, L: C.metalL, M: C.metal, m: C.metalD,
      H: C.handleL, h: C.handle });
+
+/* Beer mug for the sobriety counter. 12 x 12. */
+const MUG = sprite([
+  '.DDDDDDDD...',
+  'DFFFFFFFFD..',
+  'DFFfFFFfFD..',
+  'DAAAAAAAAD..',
+  'DAAAAAAAADDD',
+  'DAaAAAAaAD.D',
+  'DAAAAAAAAD.D',
+  'DAaAAAAaADDD',
+  'DAAAAAAAAD..',
+  'DAaAAAAaAD..',
+  'DAAAAAAAAD..',
+  '.DDDDDDDD...'
+], { D: C.ink, F: C.foam, f: C.foamS, A: C.beer, a: C.beerD });
 
 /* pivot = the point the hand grips, and the point the hammer tumbles around */
 const HPX = 7, HPY = 21;
@@ -407,10 +425,26 @@ function saveBest(v) { try { localStorage.setItem('stump.best', v); } catch (e) 
    DROP_LINE, so every throw sweeps through a true grip at least once — whether
    you take it is on you. Later nails raise the ceiling (fewer chances) and a
    harder throw spins faster (more chances, but each one flashes past). */
+/* ---------------------------------------------------------------- sobriety */
+/* Beers are an opt-in handicap, kept outside `g` so they survive a restart.
+   Each one narrows the grip you can call good, closes the reach in a little,
+   and puts a sway in your swing hand. */
+const BEER_MAX = 6;
+const SOBRIETY = ['SOBER', 'BUZZED', 'TIPSY', 'MERRY', 'DRUNK', 'HAMMERED', 'BLIND'];
+let beers = 0;
+/* grade thresholds shrink — bounded so PERFECT never drops under a frame wide */
+const boozeGrip = () => 1 - Math.min(0.45, beers * 0.075);
+/* how far the swing marker wanders, as a fraction of the meter */
+const boozeSway = () => beers * 0.020;
+/* and the reachable corridor closes in */
+const boozeReach = () => beers * 2;
+/* the only thing you gain: a cut of the score for playing it drunk */
+const boozeBonus = () => 1 + beers * 0.15;
+
 /* The ceiling of the reach creeps down as nails get stubborn, which costs you
    chances rather than reaction time. Bounded so a throw always turns past true
    at least once. */
-const catchTop = () => Math.min(46, 36 + (g.level - 1) * 4);
+const catchTop = () => Math.min(46, 36 + (g.level - 1) * 4) + boozeReach();
 /* Ceiling on how fast it may tumble, so the top grade stays reachable by hand. */
 const spinCap = () => Math.min(16, 13 + (g.level - 1) * 0.6);
 /* Total degrees the hammer should turn while it is catchable. Always more than
@@ -441,11 +475,36 @@ addEventListener('keydown', e => {
     if (!e.repeat && !pressed) { pressed = true; down(); }
   }
   if (e.code === 'KeyR') { newGame(); g.state = S.READY; }
+  if (e.code === 'KeyB') { audio(); drinkBeer(); }
 });
 addEventListener('keyup', e => {
   if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp') { pressed = false; up(); }
 });
-canvas.addEventListener('pointerdown', e => { e.preventDefault(); pressed = true; down(); });
+/* screen pixels -> the 256x224 canvas grid, whatever the CSS scale is */
+function canvasPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height];
+}
+function drinkBeer() {
+  beers = beers >= BEER_MAX ? 0 : beers + 1;
+  if (beers === 0) { arp([392, 523, 659], 0.05, 'square', 0.1); say('SOBERED UP', C.good, 50); }
+  else {
+    // a gulp, pitched lower the more you have had
+    tone(300 - beers * 22, 0.12, 'sawtooth', 0.1, 150 - beers * 12);
+    noise(0.09, 0.1, 900);
+    say(SOBRIETY[beers] + '  +' + Math.round(beers * 15) + '% SCORE', C.gold, 46);
+  }
+}
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  const [x, y] = canvasPos(e);
+  if (inBeerBtn(x, y)) { audio(); drinkBeer(); return; }   // never counts as a swing
+  pressed = true; down();
+});
+canvas.addEventListener('pointermove', e => {
+  const [x, y] = canvasPos(e);
+  canvas.style.cursor = inBeerBtn(x, y) ? 'pointer' : 'default';
+});
 addEventListener('pointerup', e => { if (pressed) { pressed = false; up(); } });
 addEventListener('blur', () => { if (pressed) { pressed = false; up(); } });
 addEventListener('contextmenu', e => e.preventDefault());
@@ -463,7 +522,11 @@ function release() {
   const t1 = Math.sqrt(Math.max(0, 2 * (top - apex) / GRAVITY));
   const t2 = Math.sqrt(2 * (DROP_LINE - apex) / GRAVITY);
   const live = Math.max(8, t2 - t1);
-  h.spin = clamp(sweepFor(g.power) / live, 5, spinCap()) * (Math.random() < 0.5 ? -1 : 1);
+  /* The cap keeps the top grade reachable, but it must never hold the sweep
+     under a full turn — that would make a throw simply ungrippable. When the
+     geometry is tight (drunk, late nail, hard throw) the floor wins. */
+  const cap = Math.max(spinCap(), 380 / live);
+  h.spin = clamp(sweepFor(g.power) / live, 5, cap) * (Math.random() < 0.5 ? -1 : 1);
   g.state = S.FLY; g.t = 0; g.tooEarly = 0;
   SFX.throw();
   burst(HAND_X, HAND_Y, 5, [C.white, C.cloudS], 1.2, 14, 0.05);
@@ -491,12 +554,14 @@ function attemptCatch() {
   burst(h.x, h.y, 8, [C.white, C.gold], 1.6, 16, 0.08);
 
   /* The grip decides how much room you get on the swing. Square in the hand and
-     the nail is hard to miss; cocked over and you are threading a needle. */
-  if (a <= 12)      g.grade = { name: 'PERFECT',  depth: 34, win: .42, core: .130, bend: 0, col: C.gold,    pts: 300 };
-  else if (a <= 28) g.grade = { name: 'SOLID',    depth: 23, win: .30, core: .090, bend: 0, col: C.good,    pts: 180 };
-  else if (a <= 55) g.grade = { name: 'OFF-TRUE', depth: 14, win: .19, core: .055, bend: 0, col: C.white,   pts: 80  };
-  else if (a <= 100)g.grade = { name: 'GLANCING', depth: 7,  win: .11, core: .032, bend: 1, col: C.handleL, pts: 25  };
-  else              g.grade = { name: 'BACKWARDS',depth: 3,  win: .055,core: .018, bend: 1, col: C.bad,     pts: 10  };
+     the nail is hard to miss; cocked over and you are threading a needle.
+     Drink and every band tightens around you. */
+  const k = boozeGrip();
+  if (a <= 12 * k)      g.grade = { name: 'PERFECT',  depth: 34, win: .42, core: .130, bend: 0, col: C.gold,    pts: 300 };
+  else if (a <= 28 * k) g.grade = { name: 'SOLID',    depth: 23, win: .30, core: .090, bend: 0, col: C.good,    pts: 180 };
+  else if (a <= 55 * k) g.grade = { name: 'OFF-TRUE', depth: 14, win: .19, core: .055, bend: 0, col: C.white,   pts: 80  };
+  else if (a <= 100 * k)g.grade = { name: 'GLANCING', depth: 7,  win: .11, core: .032, bend: 1, col: C.handleL, pts: 25  };
+  else                  g.grade = { name: 'BACKWARDS',depth: 3,  win: .055,core: .018, bend: 1, col: C.bad,     pts: 10  };
 }
 
 /* Arm the swing meter: a marker sweeps once, and where you stop it decides
@@ -505,9 +570,10 @@ function armSwing() {
   const gr = g.grade;
   const half = gr.win / 2;
   g.aim = {
-    t: 0, pos: 0, frames: Math.max(38, 56 - (g.level - 1) * 3),
+    t: 0, pos: 0, base: 0, frames: Math.max(38, 56 - (g.level - 1) * 3),
     win: gr.win, core: gr.core,
     centre: clamp(rand(0.44, 0.80), half + 0.05, 1 - half - 0.05),
+    ph1: rand(0, 6.28), ph2: rand(0, 6.28),
     locked: -1, result: null, off: 0
   };
   g.state = S.AIM; g.t = 0;
@@ -554,7 +620,7 @@ function strike() {
   if (res === 'miss') g.combo = 0;
   else if (res === 'core' && gr.depth >= 14) g.combo++;
   const mult = 1 + Math.min(4, g.combo) * 0.5;
-  const pts = Math.round((gr.pts * (res === 'core' ? 1 : 0.5) + dep * 6) * mult * powMul);
+  const pts = Math.round((gr.pts * (res === 'core' ? 1 : 0.5) + dep * 6) * mult * powMul * boozeBonus());
 
   const ny = nailTopY();
   if (dep > 0.5) {
@@ -653,12 +719,16 @@ function update() {
     case S.AIM: {
       const a = g.aim;
       a.t++;
-      a.pos = Math.min(1, a.t / a.frames);
+      a.base = Math.min(1, a.t / a.frames);
+      // a drunk hand wanders; two slow sines read as a sway, not as static
+      const sway = boozeSway() *
+        (Math.sin(a.t * 0.29 + a.ph1) * 0.62 + Math.sin(a.t * 0.61 + a.ph2) * 0.38);
+      a.pos = clamp(a.base + sway, 0, 1);
       if (a.t % 5 === 0) SFX.sweep();
       // held ready — matches the swing's rest pose so there is no pop
       h.x = HAND_X; h.y = HAND_Y + Math.sin(a.t * 0.28); h.a = g.grip;
       g.hand = [h.x, h.y];
-      if (a.pos >= 1) lockSwing(null);      // let it run out and you flail
+      if (a.base >= 1) lockSwing(null);     // let it run out and you flail
       break;
     }
 
@@ -924,6 +994,31 @@ function drawGripDial(x, y, ang, label) {
   if (label) textO(label, x - textW(label) / 2, y + r + 3, C.white);
 }
 
+/* The sobriety counter. Click it to sink one; click at the bottom to sober up. */
+/* sits clear of the swing meter, which starts at x=54 */
+const BEER_BTN = { x: 2, y: 188, w: 50, h: 32 };
+const inBeerBtn = (x, y) =>
+  x >= BEER_BTN.x && x < BEER_BTN.x + BEER_BTN.w &&
+  y >= BEER_BTN.y && y < BEER_BTN.y + BEER_BTN.h;
+
+function drawBeerButton() {
+  const b = BEER_BTN, atMax = beers >= BEER_MAX;
+  R(b.x, b.y, b.w, b.h, C.ink);
+  R(b.x + 1, b.y + 1, b.w - 2, b.h - 2, beers ? '#3a2a18' : C.panel);
+  R(b.x + 1, b.y + 1, b.w - 2, 1, beers ? '#5a4020' : '#32324c');   // bevel
+  R(b.x + 1, b.y + b.h - 2, b.w - 2, 1, C.black);
+
+  ctx.drawImage(MUG, b.x + 3, b.y + 3);
+  const cnt = 'X' + beers;
+  text(cnt, b.x + 19, b.y + 5, atMax ? C.bad : beers ? C.gold : C.dim);
+  if (beers) text('+' + Math.round(beers * 15) + '%', b.x + 19, b.y + 13, C.good);
+
+  // sobriety word, or a nudge that another tap sobers you up
+  const word = (atMax && (g.t >> 4) % 2 === 0) ? 'SOBER?' : SOBRIETY[beers];
+  const col = beers >= 5 ? C.bad : beers >= 3 ? C.handleL : beers ? C.gold : C.dim;
+  text(word, b.x + ((b.w - textW(word)) / 2 | 0), b.y + b.h - 9, col);
+}
+
 /* The swing meter. Its lit zone is exactly as wide as the grip earned. */
 function drawSwingMeter() {
   const showFor = g.state === S.AIM || (g.state === S.SWING && g.swingT < 20);
@@ -1071,8 +1166,9 @@ function draw() {
   const sh = g.shake;
   if (sh > 0.4) ctx.translate(Math.round(rand(-sh, sh)), Math.round(rand(-sh, sh)));
 
-  if (g.state === S.TITLE) { drawTitle(); ctx.restore(); return; }
-  if (g.state === S.OVER) { drawOver(); ctx.restore(); return; }
+  // the counter is a setting, so it stays reachable on every screen
+  if (g.state === S.TITLE) { drawTitle(); drawBeerButton(); ctx.restore(); return; }
+  if (g.state === S.OVER) { drawOver(); drawBeerButton(); ctx.restore(); return; }
 
   drawScene();
   drawHUD();
@@ -1103,6 +1199,7 @@ function draw() {
   }
 
   drawSwingMeter();
+  drawBeerButton();
 
   if (g.tooEarly > 0) textO('TOO EARLY', HAND_X - textW('TOO EARLY') / 2, 106, C.white);
 
@@ -1152,7 +1249,10 @@ fit();
 /* debug handle: lets a headless/hidden page be stepped and inspected */
 window.STUMP = { step: n => { for (let i = 0; i < (n || 1); i++) update(); draw(); },
                  tick: n => { for (let i = 0; i < (n || 1); i++) update(); },
-                 get g() { return g; }, S, down, up, reset: newGame };
+                 get g() { return g; }, S, down, up, reset: newGame,
+                 get beers() { return beers; },
+                 setBeers: n => { beers = clamp(n | 0, 0, BEER_MAX); },
+                 BEER_BTN, canvasPos };
 
 let last = performance.now(), acc = 0;
 const STEP = 1000 / 60;

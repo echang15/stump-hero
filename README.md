@@ -26,6 +26,7 @@ Open `index.html`, or play the hosted copy on GitHub Pages.
 | **Release** | throw. |
 | **Press again** | catch. Only counts while the hammer is *falling* and inside the marked corridor. |
 | **Press again** | swing, when the sweeping marker is over the lit zone. |
+| **Click the mug** | drink a beer. Makes everything harder and the score better. `B` also works. |
 | `R` | restart |
 
 The dashed column is how far you can reach. The red dashed line at the bottom is the
@@ -61,6 +62,38 @@ Let the marker run off the end without pressing and you flail: same as a miss.
 Drive the nail flush to move to the next one. Nails get longer and the hammer spins
 faster. Three lives. Consecutive flush hits build a score multiplier.
 
+## Sobriety
+
+There's a beer mug in the bottom-left corner. Click it (or press `B`) and the counter
+goes up: **SOBER → BUZZED → TIPSY → MERRY → DRUNK → HAMMERED → BLIND.** Click at six and
+you sober up again. It carries across restarts, so you set it once and it sticks.
+
+Each beer does three things:
+
+- **Narrows what counts as a good grip.** Every grade band tightens by 7.5%, to a floor
+  of 55%. The PERFECT catch window goes from about 2 frames wide sober to about 1 at six.
+- **Closes in the reach.** The catch corridor's ceiling drops 2px per beer, so the hammer
+  is catchable for less of its fall and comes round fewer times.
+- **Puts a sway in your swing hand.** The marker on the swing meter stops tracking
+  straight and wanders up to 12% of the bar, drifting rather than juddering. Where it
+  actually *is* when you press is what counts — so you can read the sway and fight it,
+  but not ignore it.
+
+In exchange you score **+15% per beer**, up to +90%.
+
+Measured against a simulated player with two frames of timing jitter:
+
+| Beers | Flush hits | Whiffed swings |
+|---|---|---|
+| 0 | 83% | 0% |
+| 2 | 76% | 1% |
+| 4 | 61% | 4% |
+| 6 | 49% | 8% |
+
+Drinking never makes a throw *impossible*, though. The spin is still solved so that every
+throw turns past a true grip at least once, however many you've had — the hammer just
+gives you less of a moment to take it.
+
 ## Hosting
 
 Live at **https://echang15.github.io/stump-hero/**
@@ -95,4 +128,6 @@ python -m http.server 5173
 difficulty knobs are the small functions near the top of the state section in `game.js`:
 `catchTop`, `spinCap`, `sweepFor` and `depthNeed`. The swing windows are the `win` and
 `core` fields on the grade table in `attemptCatch`, and the sweep speed is `frames` in
-`armSwing`.
+`armSwing`. Everything the beer counter touches is in `boozeGrip`, `boozeSway`,
+`boozeReach` and `boozeBonus` — drop `boozeBonus` to `() => 1` if you'd rather drinking
+were pure self-harm.
