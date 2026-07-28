@@ -48,21 +48,13 @@ for the hammer to come round again — but it's falling the whole time.
 Drive the nail flush to move to the next one. Nails get longer and the hammer spins
 faster. Three lives. Consecutive good hits build a score multiplier.
 
-## Hosting on GitHub Pages
+## Hosting
 
-The repository root is the site — there's nothing to compile.
+Live at **https://echang15.github.io/stump-hero/**
 
-```bash
-git init && git add -A && git commit -m "STUMP"
-git branch -M main
-git remote add origin https://github.com/<you>/stump.git
-git push -u origin main
-```
-
-Then in the repo: **Settings → Pages → Source: Deploy from a branch → `main` / `/ (root)`**.
-It'll be live at `https://<you>.github.io/stump/` in a minute or so.
-
-`.nojekyll` is included so Pages serves the files as-is.
+The repository root is the site — there's nothing to compile. Pushing to `main`
+publishes it, via the workflow in `.github/workflows/pages.yml`. `.nojekyll` is
+included so Pages serves the files as-is rather than running them through Jekyll.
 
 ## Files
 
