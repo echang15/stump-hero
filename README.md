@@ -52,9 +52,10 @@ faster. Three lives. Consecutive good hits build a score multiplier.
 
 Live at **https://echang15.github.io/stump-hero/**
 
-The repository root is the site — there's nothing to compile. Pushing to `main`
-publishes it, via the workflow in `.github/workflows/pages.yml`. `.nojekyll` is
-included so Pages serves the files as-is rather than running them through Jekyll.
+The repository root is the site — there's nothing to compile, so Pages serves it
+directly from the branch (**Settings → Pages → Deploy from a branch → `main` → `/ (root)`**).
+Pushing to `main` publishes. `.nojekyll` keeps Pages from running the files
+through Jekyll.
 
 ## Files
 
