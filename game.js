@@ -208,6 +208,10 @@ const SFX = {
   hit:    () => { noise(0.16, 0.35, 1100); tone(110, 0.14, 'triangle', 0.22, 55); },
   weak:   () => { noise(0.09, 0.16, 700); tone(90, 0.1, 'triangle', 0.12, 60); },
   whiff:  () => tone(300, 0.16, 'sawtooth', 0.07, 110),
+  sweep:  () => tone(1200, 0.012, 'square', 0.025),
+  lock:   () => tone(660, 0.06, 'square', 0.13),
+  core:   () => { tone(990, 0.05, 'square', 0.15); arp([1320, 1760], 0.045); },
+  lockMiss: () => tone(140, 0.14, 'sawtooth', 0.11, 70),
   drop:   () => { tone(300, 0.35, 'square', 0.12, 70); noise(0.1, 0.14, 500); },
   ow:     () => { tone(180, 0.3, 'sawtooth', 0.14, 60); noise(0.14, 0.2, 400); },
   level:  () => arp([523, 659, 784, 1046, 1318], 0.06, 'square', 0.13),
@@ -377,7 +381,7 @@ const float = (str, x, y, col, s = 1, life = 60) =>
 /* ----------------------------------------------------------------- state */
 const S = {
   TITLE: 'title', READY: 'ready', CHARGE: 'charge', FLY: 'fly',
-  CAUGHT: 'caught', SWING: 'swing', SETTLE: 'settle',
+  CAUGHT: 'caught', AIM: 'aim', SWING: 'swing', SETTLE: 'settle',
   DROP: 'drop', CLEAR: 'clear', OVER: 'over'
 };
 
@@ -388,7 +392,7 @@ function newGame() {
     depth: 0, bends: 0, nailX: NAIL_X,
     charge: 0, power: 0,
     ham: { x: HAND_X, y: HAND_Y, vy: 0, a: 0, spin: 0 }, catchPos: [HAND_X, HAND_Y],
-    grip: 0, grade: null, swingT: 0, struck: false,
+    grip: 0, grade: null, aim: null, swingT: 0, struck: false,
     hand: [HAND_X, HAND_Y], lean: 0, shake: 0, flash: 0,
     msg: '', msgCol: C.white, msgT: 0,
     tooEarly: 0, dropT: 0, clearT: 0, overT: 0, hintT: 0
@@ -426,6 +430,8 @@ function down() {
   if (g.state === S.OVER) { if (g.overT > 45) { newGame(); g.state = S.READY; SFX.start(); } return; }
   if (g.state === S.READY) { g.state = S.CHARGE; g.charge = 0; SFX.charge(); return; }
   if (g.state === S.FLY) { attemptCatch(); return; }
+  // brief lockout so the press that caught the hammer cannot also fire the swing
+  if (g.state === S.AIM && g.aim.t > 5 && g.aim.locked < 0) { lockSwing(g.aim.pos); return; }
 }
 function up() { if (g.state === S.CHARGE) release(); }
 
@@ -484,11 +490,47 @@ function attemptCatch() {
   g.flash = 4;
   burst(h.x, h.y, 8, [C.white, C.gold], 1.6, 16, 0.08);
 
-  if (a <= 12)      g.grade = { name: 'PERFECT', depth: 34, bend: 0, col: C.gold,  pts: 300 };
-  else if (a <= 28) g.grade = { name: 'SOLID',   depth: 22, bend: 0, col: C.good,  pts: 180 };
-  else if (a <= 55) g.grade = { name: 'OFF-TRUE',depth: 12, bend: 0, col: C.white, pts: 80  };
-  else if (a <= 100)g.grade = { name: 'GLANCING',depth: 5,  bend: 1, col: C.handleL, pts: 25 };
-  else              g.grade = { name: 'BACKWARDS',depth: 0, bend: 1, col: C.bad,   pts: 0   };
+  /* The grip decides how much room you get on the swing. Square in the hand and
+     the nail is hard to miss; cocked over and you are threading a needle. */
+  if (a <= 12)      g.grade = { name: 'PERFECT',  depth: 34, win: .42, core: .130, bend: 0, col: C.gold,    pts: 300 };
+  else if (a <= 28) g.grade = { name: 'SOLID',    depth: 23, win: .30, core: .090, bend: 0, col: C.good,    pts: 180 };
+  else if (a <= 55) g.grade = { name: 'OFF-TRUE', depth: 14, win: .19, core: .055, bend: 0, col: C.white,   pts: 80  };
+  else if (a <= 100)g.grade = { name: 'GLANCING', depth: 7,  win: .11, core: .032, bend: 1, col: C.handleL, pts: 25  };
+  else              g.grade = { name: 'BACKWARDS',depth: 3,  win: .055,core: .018, bend: 1, col: C.bad,     pts: 10  };
+}
+
+/* Arm the swing meter: a marker sweeps once, and where you stop it decides
+   whether the head finds the nail at all. */
+function armSwing() {
+  const gr = g.grade;
+  const half = gr.win / 2;
+  g.aim = {
+    t: 0, pos: 0, frames: Math.max(38, 56 - (g.level - 1) * 3),
+    win: gr.win, core: gr.core,
+    centre: clamp(rand(0.44, 0.80), half + 0.05, 1 - half - 0.05),
+    locked: -1, result: null, off: 0
+  };
+  g.state = S.AIM; g.t = 0;
+}
+
+/* Stop the marker. `pos` of null means it ran off the end untouched. */
+function lockSwing(pos) {
+  const a = g.aim;
+  a.locked = pos === null ? 1 : pos;
+  const d = pos === null ? 9 : a.locked - a.centre;
+  const sign = d < 0 ? -1 : 1;
+
+  if (pos !== null && Math.abs(d) <= a.core / 2) {
+    a.result = 'core'; a.off = 0;
+    SFX.core();
+  } else if (pos !== null && Math.abs(d) <= a.win / 2) {
+    a.result = 'zone'; a.off = sign * 3;
+    SFX.lock();
+  } else {
+    a.result = 'miss'; a.off = sign * rand(15, 27);
+    SFX.lockMiss();
+  }
+  g.state = S.SWING; g.t = 0; g.swingT = 0; g.struck = false;
 }
 
 function fumble(msg, ow) {
@@ -503,37 +545,43 @@ function fumble(msg, ow) {
 
 function strike() {
   g.struck = true;
-  const gr = g.grade;
+  const gr = g.grade, res = g.aim.result;
+  const swingMul = res === 'core' ? 1 : res === 'zone' ? 0.6 : 0;
   const powMul = 1 + g.power * 0.55;
   const bendPen = 1 - Math.min(0.4, g.bends * 0.1);
-  const dep = gr.depth * powMul * bendPen;
+  const dep = gr.depth * swingMul * powMul * bendPen;
 
-  if (gr.depth >= 22) { g.combo++; } else if (gr.depth < 5) { g.combo = 0; }
+  if (res === 'miss') g.combo = 0;
+  else if (res === 'core' && gr.depth >= 14) g.combo++;
   const mult = 1 + Math.min(4, g.combo) * 0.5;
-  const pts = Math.round((gr.pts + dep * 6) * mult * powMul);
+  const pts = Math.round((gr.pts * (res === 'core' ? 1 : 0.5) + dep * 6) * mult * powMul);
 
+  const ny = nailTopY();
   if (dep > 0.5) {
     g.depth = Math.min(depthNeed(), g.depth + dep);
     g.score += pts;
     g.shake = clamp(dep * 0.22, 1, 6);
-    const nx = g.nailX, ny = nailTopY();
-    burst(nx, ny, gr.depth >= 22 ? 16 : 9,
-          [C.wood1, C.wood2, C.wood3, C.metalL], gr.depth >= 22 ? 2.6 : 1.7, 30);
-    if (gr.depth >= 34) { g.flash = 6; SFX.perfect(); SFX.hit(); }
-    else if (gr.depth >= 22) { SFX.good(); SFX.hit(); }
+    const nx = g.nailX;
+    const big = res === 'core' && gr.depth >= 23;
+    burst(nx, ny, big ? 16 : 9, [C.wood1, C.wood2, C.wood3, C.metalL], big ? 2.6 : 1.7, 30);
+    if (res === 'core' && gr.depth >= 34) { g.flash = 6; SFX.perfect(); SFX.hit(); }
+    else if (big) { SFX.good(); SFX.hit(); }
     else SFX.weak();
-    float(gr.name, nx, ny - 24, gr.col, 1, 55);
+    float(res === 'core' ? 'FLUSH!' : 'CLEAN', nx, ny - 24, res === 'core' ? gr.col : C.white, 1, 55);
     float('+' + pts, nx, ny - 36, C.white, 1, 55);
     if (mult > 1) float('X' + mult.toFixed(1).replace('.0', ''), nx + 32, ny - 10, C.gold, 1, 50);
   } else {
+    // the head came down on bare wood next to the nail
     SFX.whiff();
-    g.combo = 0;
-    float(gr.name === 'BACKWARDS' ? 'WRONG END!' : 'WHIFF', g.nailX, nailTopY() - 16, C.bad, 1, 55);
+    g.shake = 3;
+    const mx = g.nailX + g.aim.off;
+    burst(mx, NAIL_Y - 2, 12, [C.wood1, C.wood2, C.wood3, C.wood4], 2.2, 28);
+    float(gr.name === 'BACKWARDS' ? 'WRONG END!' : 'MISSED THE NAIL', mx, ny - 26, C.bad, 1, 60);
   }
-  if (gr.bend && g.depth < depthNeed()) {
+  if ((gr.bend || res === 'miss') && g.depth < depthNeed()) {
     g.bends++;
     g.nailX += rand(-0.6, 0.6);
-    if (g.bends === 3) float('BENT NAIL', g.nailX, nailTopY() - 34, C.bad, 1, 60);
+    if (g.bends === 3) float('BENT NAIL', g.nailX, ny - 38, C.bad, 1, 60);
   }
 }
 
@@ -598,7 +646,19 @@ function update() {
       h.y = lerp(g.catchPos[1], HAND_Y, e);
       h.a = g.grip;
       g.hand = reachTo(h.x, h.y);
-      if (g.t > 34) { g.state = S.SWING; g.t = 0; g.swingT = 0; g.struck = false; }
+      if (g.t > 28) armSwing();
+      break;
+    }
+
+    case S.AIM: {
+      const a = g.aim;
+      a.t++;
+      a.pos = Math.min(1, a.t / a.frames);
+      if (a.t % 5 === 0) SFX.sweep();
+      // held ready — matches the swing's rest pose so there is no pop
+      h.x = HAND_X; h.y = HAND_Y + Math.sin(a.t * 0.28); h.a = g.grip;
+      g.hand = [h.x, h.y];
+      if (a.pos >= 1) lockSwing(null);      // let it run out and you flail
       break;
     }
 
@@ -607,9 +667,12 @@ function update() {
       const t = g.swingT;
       const rest = [HAND_X, HAND_Y];
       const wind = [HAND_X - 15, HAND_Y - 13];
-      /* place the hand so that a true grip lands the head square on the nail */
-      const A_HIT = 128, nt = nailTopY();
-      const hit = [g.nailX - HEAD_OFF * Math.sin(A_HIT * D2R),
+      /* Aim the blow. A true grip with a well-timed swing puts the head square
+         on the nail head; mistiming walks the whole arc off to one side. */
+      const A_HIT = 128;
+      const miss = g.aim.result === 'miss';
+      const nt = miss ? NAIL_Y - 1 : nailTopY();
+      const hit = [g.nailX + g.aim.off - HEAD_OFF * Math.sin(A_HIT * D2R),
                    (nt - 2) + HEAD_OFF * Math.cos(A_HIT * D2R)];
       let base;
       if (t <= 12) {                       // wind up
@@ -861,6 +924,45 @@ function drawGripDial(x, y, ang, label) {
   if (label) textO(label, x - textW(label) / 2, y + r + 3, C.white);
 }
 
+/* The swing meter. Its lit zone is exactly as wide as the grip earned. */
+function drawSwingMeter() {
+  const showFor = g.state === S.AIM || (g.state === S.SWING && g.swingT < 20);
+  if (!showFor || !g.aim) return;
+  const a = g.aim, gr = g.grade;
+  const bw = 148, bx = ((W - bw) / 2) | 0, by = 202, bh = 9;
+
+  R(bx - 2, by - 2, bw + 4, bh + 4, C.ink);
+  R(bx, by, bw, bh, '#2a2a40');
+  R(bx, by, bw, 1, '#1a1a2c');
+
+  const zx = Math.round(bx + (a.centre - a.win / 2) * bw);
+  const zw = Math.max(2, Math.round(a.win * bw));
+  const cx = Math.round(bx + (a.centre - a.core / 2) * bw);
+  const cw = Math.max(1, Math.round(a.core * bw));
+
+  R(zx, by, zw, bh, gr.col);                       // the room your grip bought
+  R(zx, by, zw, 1, C.white);
+  R(cx, by, cw, bh, C.white);                      // flush-hit core
+  R(cx, by + bh - 1, cw, 1, gr.col);
+
+  // marker: sweeping, or frozen where you stopped it
+  const mp = a.locked >= 0 ? a.locked : a.pos;
+  const mx = Math.round(bx + mp * bw);
+  const live = a.locked < 0;
+  const mcol = live ? C.metalL : a.result === 'core' ? C.gold
+             : a.result === 'zone' ? C.good : C.bad;
+  R(mx - 1, by - 4, 3, bh + 8, C.ink);
+  R(mx, by - 3, 1, bh + 6, mcol);
+  R(mx - 1, by - 4, 3, 2, mcol);
+
+  if (live) {
+    if ((g.aim.t >> 3) % 2 === 0) textO('STRIKE!', bx + bw / 2 - textW('STRIKE!') / 2, by - 14, C.white);
+  } else {
+    const lbl = a.result === 'core' ? 'FLUSH' : a.result === 'zone' ? 'CONNECTED' : 'MISSED';
+    textO(lbl, bx + bw / 2 - textW(lbl) / 2, by - 14, mcol);
+  }
+}
+
 function drawHUD() {
   // top bar
   ctx.globalAlpha = 0.55; R(0, 0, W, 20, C.ink); ctx.globalAlpha = 1;
@@ -923,7 +1025,10 @@ function drawScene() {
   for (const p of particles) R(p.x, p.y, p.sz, p.sz, p.col);
   for (const f of floaters) {
     ctx.globalAlpha = f.life > 12 ? 1 : f.life / 12;
-    textO(f.str, (f.x - textW(f.str, f.s) / 2) | 0, f.y | 0, f.col, f.s);
+    const fw = textW(f.str, f.s);
+    // keep it on screen — impact points near the edge would push it off
+    const fx = clamp((f.x - fw / 2) | 0, 2, W - fw - 2);
+    textO(f.str, fx, f.y | 0, f.col, f.s);
     ctx.globalAlpha = 1;
   }
 }
@@ -938,15 +1043,16 @@ function drawTitle() {
   textCO('STUMP', 22, C.gold, 4);
   textCO('HAMMER  AND  NAIL', 62, C.white, 1);
 
-  ctx.globalAlpha = 0.72; R(20, 138, W - 40, 46, C.ink); ctx.globalAlpha = 1;
-  R(20, 137, W - 40, 1, C.dim); R(20, 184, W - 40, 1, C.dim);
+  ctx.globalAlpha = 0.72; R(14, 138, W - 28, 56, C.ink); ctx.globalAlpha = 1;
+  R(14, 137, W - 28, 1, C.dim); R(14, 194, W - 28, 1, C.dim);
   textC('THROW IT UP. CATCH IT.', 143, C.metalL);
-  textC('HOW YOU CATCH IT IS HOW', 154, C.dim);
-  textC('YOU HOLD IT. NO ADJUSTING.', 164, C.dim);
-  textC('NOW DRIVE THE NAIL.', 175, C.metalL);
+  textC('HOW YOU CATCH IT IS HOW YOU', 154, C.dim);
+  textC('HOLD IT. A TRUE GRIP BUYS A', 164, C.dim);
+  textC('WIDE SWING. A BAD ONE LEAVES', 174, C.dim);
+  textC('YOU A SLIVER.', 184, C.metalL);
 
-  if ((g.t >> 4) % 2 === 0) textCO('PRESS  SPACE', 196, C.gold, 1);
-  if (g.best > 0) textC('BEST ' + g.best, 210, C.dim);
+  if ((g.t >> 4) % 2 === 0) textCO('PRESS  SPACE', 202, C.gold, 1);
+  if (g.best > 0) textC('BEST ' + g.best, 214, C.dim);
 }
 
 function drawOver() {
@@ -983,7 +1089,7 @@ function draw() {
   }
 
   /* the grip readout — the whole point of the game */
-  if (g.state === S.CAUGHT || g.state === S.SWING || g.state === S.SETTLE) {
+  if (g.state === S.CAUGHT || g.state === S.AIM || g.state === S.SWING || g.state === S.SETTLE) {
     const dx = 34, dy = 74;
     const deg = Math.round(Math.abs(g.grip));
     textO('GRIP', dx - textW('GRIP') / 2, dy - 24, C.white);
@@ -991,8 +1097,12 @@ function draw() {
     if (g.state === S.CAUGHT) {
       textO('LOCKED', dx - textW('LOCKED') / 2, dy + 24, g.grade.col);
       if (g.t < 22) textCO(g.grade.name, 100, g.grade.col, 2);
+    } else {
+      textO(g.grade.name, dx - textW(g.grade.name) / 2, dy + 24, g.grade.col);
     }
   }
+
+  drawSwingMeter();
 
   if (g.tooEarly > 0) textO('TOO EARLY', HAND_X - textW('TOO EARLY') / 2, 106, C.white);
 

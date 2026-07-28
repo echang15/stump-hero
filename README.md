@@ -25,6 +25,7 @@ Open `index.html`, or play the hosted copy on GitHub Pages.
 | **Hold** | wind up. Longer = a harder throw: more spin, more chances at a true grip, and a heavier blow — but each pass flashes by faster. |
 | **Release** | throw. |
 | **Press again** | catch. Only counts while the hammer is *falling* and inside the marked corridor. |
+| **Press again** | swing, when the sweeping marker is over the lit zone. |
 | `R` | restart |
 
 The dashed column is how far you can reach. The red dashed line at the bottom is the
@@ -34,19 +35,31 @@ Every throw is guaranteed to turn past a true grip at least once, so a bad catch
 always a timing mistake and never bad luck. If you miss the good moment, you can wait
 for the hammer to come round again — but it's falling the whole time.
 
-### Grades
+## The swing is a second bet
 
-| Grip error | Result |
-|---|---|
-| ≤ 12° | **PERFECT** — square on the head |
-| ≤ 28° | **SOLID** |
-| ≤ 55° | **OFF-TRUE** |
-| ≤ 100° | **GLANCING** — bites the wood, bends the nail |
-| ≤ 155° | **BACKWARDS** — you swing the handle at it |
-| > 155° | **caught the head.** Costs a life. |
+Catching it well doesn't drive the nail — it only buys you room to try. A meter sweeps
+once across the bottom of the screen, and **your grip decides how much of that bar is
+lit.** Stop the marker on the lit zone to connect; stop it on the white core for a flush
+hit at full force. Miss the zone entirely and the head comes down on bare wood beside
+the nail, which costs you the swing and bends the nail.
+
+A perfect catch leaves a zone so wide you can barely miss it. A backwards one leaves a
+sliver a couple of frames across, and you will usually whiff. Roughly how often a player
+with about two frames of timing jitter misses the nail outright:
+
+| Grip error | Grade | Lit zone | Whiff rate |
+|---|---|---|---|
+| ≤ 12° | **PERFECT** — square on the head | 42% of the bar | ~0% |
+| ≤ 28° | **SOLID** | 30% | ~0% |
+| ≤ 55° | **OFF-TRUE** | 19% | ~2% |
+| ≤ 100° | **GLANCING** — bites the wood, bends the nail | 11% | ~12% |
+| ≤ 155° | **BACKWARDS** — you swing the handle at it | 5.5% | ~33% |
+| > 155° | **caught the head.** Costs a life. | — | — |
+
+Let the marker run off the end without pressing and you flail: same as a miss.
 
 Drive the nail flush to move to the next one. Nails get longer and the hammer spins
-faster. Three lives. Consecutive good hits build a score multiplier.
+faster. Three lives. Consecutive flush hits build a score multiplier.
 
 ## Hosting
 
@@ -80,4 +93,6 @@ python -m http.server 5173
 `window.STUMP` exposes `step(n)`, `tick(n)`, `g` (live game state), `down()`, `up()` and
 `reset()`, which makes it easy to drive the game frame-by-frame from the console. The
 difficulty knobs are the small functions near the top of the state section in `game.js`:
-`catchTop`, `spinCap`, `sweepFor` and `depthNeed`.
+`catchTop`, `spinCap`, `sweepFor` and `depthNeed`. The swing windows are the `win` and
+`core` fields on the grade table in `attemptCatch`, and the sweep speed is `frames` in
+`armSwing`.
