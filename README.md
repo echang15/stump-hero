@@ -26,7 +26,7 @@ Open `index.html`, or play the hosted copy on GitHub Pages.
 | **Release** | throw. |
 | **Press again** | catch. Only counts while the hammer is *falling* and inside the marked corridor. |
 | **Press again** | swing, when the sweeping marker is over the lit zone. |
-| **Click the mug** | drink a beer. Makes everything harder and the score better. `B` also works. |
+| **Click the cup** | take a sugar hit. Makes everything harder and the score better. `B` also works. |
 | `R` | restart |
 
 The dashed column is how far you can reach. The red dashed line at the bottom is the
@@ -62,41 +62,42 @@ Let the marker run off the end without pressing and you flail: same as a miss.
 Drive the nail flush to move to the next one. Nails get longer and the hammer spins
 faster. Three lives. Consecutive flush hits build a score multiplier.
 
-## Sobriety
+## Sugar
 
-There's a beer mug in the bottom-left corner. Click it (or press `B`) and the counter
-goes up: **SOBER → BUZZED → TIPSY → MERRY → DRUNK → HAMMERED → BLIND.** Click at six and
-you sober up again. It carries across restarts, so you set it once and it sticks.
+There's a fizzy-drink cup in the bottom-left corner. Click it (or press `B`) and the
+counter goes up: **STEADY → SWEET → FIZZY → BUZZING → WIRED → SHAKY → MELTDOWN.** Click at
+six and you crash back to steady. It carries across restarts, so you set it once and it
+sticks.
 
-Each beer does three things:
+Each hit does three things:
 
-- **Shrinks the catchable box, hard.** The corridor's ceiling drops 9px per beer. Because
+- **Shrinks the catchable box, hard.** The corridor's ceiling drops 9px per hit. Because
   the hammer is accelerating by then, height costs far more time than it looks: the window
-  falls from **107px / 685ms sober to 53px / 200ms at six**, about a fifth of what you
+  falls from **107px / 685ms steady to 53px / 200ms at six**, about a fifth of what you
   started with.
 - **Narrows what counts as a good grip.** Every grade band tightens by 5%, to a floor
   of 70%.
-- **Puts a sway in your swing hand.** The marker on the swing meter stops tracking
+- **Puts the jitters in your swing hand.** The marker on the swing meter stops tracking
   straight and wanders up to 12% of the bar, drifting rather than juddering. Where it
   actually *is* when you press is what counts — so you can read the sway and fight it,
   but not ignore it.
 
-In exchange you score **+15% per beer**, up to +90%.
+In exchange you score **+15% per hit**, up to +90%.
 
 Measured against a simulated player with two frames of timing jitter, playing perfectly
 otherwise:
 
-| Beers | Catch window | Throws offering a usable grip | Lives lost |
+| Sugar | Catch window | Throws offering a usable grip | Lives lost |
 |---|---|---|---|
 | 0 | 685ms | 96% | 3% |
 | 2 | 401ms | 81% | 6% |
 | 4 | 284ms | 56% | 26% |
 | 6 | 200ms | 28% | 28% |
 
-Sober, a true grip is on the table every single throw and the only question is whether you
-take it. At six, most throws simply don't offer one — you take the least-bad angle in a
-fifth of a second, or you watch it hit the dirt. It stays *possible*: a great catch at six
-beers can still be PERFECT, just rarely.
+Steady, a true grip is on the table every single throw and the only question is whether
+you take it. At six, most throws simply don't offer one — you take the least-bad angle in
+a fifth of a second, or you watch it hit the dirt. It stays *possible*: a great catch at
+full MELTDOWN can still be PERFECT, just rarely.
 
 The corridor is not shrunk any further than this on purpose. Below about ten frames the
 catchable moments are spaced so far apart in rotation that no grip near true exists even
@@ -137,6 +138,6 @@ python -m http.server 5173
 difficulty knobs are the small functions near the top of the state section in `game.js`:
 `catchTop`, `spinCap`, `sweepFor` and `depthNeed`. The swing windows are the `win` and
 `core` fields on the grade table in `attemptCatch`, and the sweep speed is `frames` in
-`armSwing`. Everything the beer counter touches is in `boozeGrip`, `boozeSway`,
-`boozeReach` and `boozeBonus` — drop `boozeBonus` to `() => 1` if you'd rather drinking
-were pure self-harm.
+`armSwing`. Everything the sugar counter touches is in `sugarGrip`, `sugarSway`,
+`sugarReach` and `sugarBonus` — drop `sugarBonus` to `() => 1` if you'd rather the
+handicap paid nothing at all.

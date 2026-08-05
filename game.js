@@ -25,7 +25,7 @@ const C = {
   hair:'#6b3f18', boot:'#3a2a1a',
   ink:'#141420', white:'#ffffff', black:'#000000',
   gold:'#fcd428', bad:'#e04030', good:'#5ce05c', dim:'#6a6a80',
-  foam:'#fff4d8', foamS:'#ddcea8', beer:'#f0a818', beerD:'#bc7a10',
+  cup:'#e8483a', cupD:'#a82c20', lid:'#eef0f8',
   panel:'#232338'
 };
 
@@ -163,21 +163,21 @@ const HAMMER = sprite([
 ], { D: C.ink, L: C.metalL, M: C.metal, m: C.metalD,
      H: C.handleL, h: C.handle });
 
-/* Beer mug for the sobriety counter. 12 x 12. */
-const MUG = sprite([
-  '.DDDDDDDD...',
-  'DFFFFFFFFD..',
-  'DFFfFFFfFD..',
-  'DAAAAAAAAD..',
-  'DAAAAAAAADDD',
-  'DAaAAAAaAD.D',
-  'DAAAAAAAAD.D',
-  'DAaAAAAaADDD',
-  'DAAAAAAAAD..',
-  'DAaAAAAaAD..',
-  'DAAAAAAAAD..',
-  '.DDDDDDDD...'
-], { D: C.ink, F: C.foam, f: C.foamS, A: C.beer, a: C.beerD });
+/* Fizzy-drink cup for the sugar counter: lid, straw, tapered cup. 12 x 12. */
+const CUP = sprite([
+  '........DD..',
+  '.......DSSD.',
+  '.......DSSD.',
+  '.DDDDDDDSSD.',
+  'DLLLLLLLSSLD',
+  'DDDDDDDDDDDD',
+  '.DCCCCCCCCD.',
+  '.DCcCCCCcCD.',
+  '.DCCCCCCCCD.',
+  '..DCcCCCcCD.',
+  '..DCCCCCCD..',
+  '..DDDDDDDD..'
+], { D: C.ink, S: C.white, L: C.lid, C: C.cup, c: C.cupD });
 
 /* pivot = the point the hand grips, and the point the hammer tumbles around */
 const HPX = 7, HPY = 21;
@@ -425,35 +425,35 @@ function saveBest(v) { try { localStorage.setItem('stump.best', v); } catch (e) 
    DROP_LINE, so every throw sweeps through a true grip at least once — whether
    you take it is on you. Later nails raise the ceiling (fewer chances) and a
    harder throw spins faster (more chances, but each one flashes past). */
-/* ---------------------------------------------------------------- sobriety */
-/* Beers are an opt-in handicap, kept outside `g` so they survive a restart.
-   Each one narrows the grip you can call good, closes the reach in a little,
-   and puts a sway in your swing hand. */
-const BEER_MAX = 6;
-const SOBRIETY = ['SOBER', 'BUZZED', 'TIPSY', 'MERRY', 'DRUNK', 'HAMMERED', 'BLIND'];
-let beers = 0;
+/* ------------------------------------------------------------------- sugar */
+/* Sugar is an opt-in handicap, kept outside `g` so it survives a restart.
+   Each hit narrows the grip you can call good, closes the reach right in,
+   and puts the jitters in your swing hand. */
+const SUGAR_MAX = 6;
+const SUGAR_LEVEL = ['STEADY', 'SWEET', 'FIZZY', 'BUZZING', 'WIRED', 'SHAKY', 'MELTDOWN'];
+let sugar = 0;
 /* Grade bands tighten too, but gently: the shrinking corridor below already
    does the heavy lifting, and squeezing both hard enough left every late catch
    stuck on BACKWARDS with no skill gradient left. */
-const boozeGrip = () => 1 - Math.min(0.30, beers * 0.05);
+const sugarGrip = () => 1 - Math.min(0.30, sugar * 0.05);
 /* how far the swing marker wanders, as a fraction of the meter */
-const boozeSway = () => beers * 0.020;
+const sugarSway = () => sugar * 0.020;
 /* And the reachable corridor collapses toward the deadline — this is the big
    one. Because the hammer is accelerating, losing height costs far more time
-   than it looks: sober you get most of the fall, six deep you get a band just
-   above the dirt worth about a fifth of the window.
+   than it looks: steady you get most of the fall, six hits deep you get a band
+   just above the dirt worth about a fifth of the window.
    Not pushed further: below ~10 frames the frames are spaced so far apart in
    rotation that no grip near true is reachable even frame-perfectly, which
    flattens every catch to the same mediocre grade. */
-const boozeReach = () => beers * 9;
-/* the only thing you gain: a cut of the score for playing it drunk */
-const boozeBonus = () => 1 + beers * 0.15;
+const sugarReach = () => sugar * 9;
+/* the only thing you gain: a cut of the score for playing it wired */
+const sugarBonus = () => 1 + sugar * 0.15;
 
 /* The ceiling of the reach creeps down as nails get stubborn, which costs you
    chances rather than reaction time. Bounded so a throw always turns past true
    at least once. */
 const catchTop = () =>
-  Math.min(118, Math.min(46, 36 + (g.level - 1) * 4) + boozeReach());
+  Math.min(118, Math.min(46, 36 + (g.level - 1) * 4) + sugarReach());
 /* Ceiling on how fast it may tumble, so the top grade stays reachable by hand. */
 const spinCap = () => Math.min(16, 13 + (g.level - 1) * 0.6);
 /* Total degrees the hammer should turn while it is catchable. Always more than
@@ -484,7 +484,7 @@ addEventListener('keydown', e => {
     if (!e.repeat && !pressed) { pressed = true; down(); }
   }
   if (e.code === 'KeyR') { newGame(); g.state = S.READY; }
-  if (e.code === 'KeyB') { audio(); drinkBeer(); }
+  if (e.code === 'KeyB') { audio(); takeSugar(); }
 });
 addEventListener('keyup', e => {
   if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp') { pressed = false; up(); }
@@ -494,25 +494,25 @@ function canvasPos(e) {
   const r = canvas.getBoundingClientRect();
   return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height];
 }
-function drinkBeer() {
-  beers = beers >= BEER_MAX ? 0 : beers + 1;
-  if (beers === 0) { arp([392, 523, 659], 0.05, 'square', 0.1); say('SOBERED UP', C.good, 50); }
+function takeSugar() {
+  sugar = sugar >= SUGAR_MAX ? 0 : sugar + 1;
+  if (sugar === 0) { arp([523, 392, 262], 0.07, 'square', 0.1); say('SUGAR CRASH', C.good, 50); }
   else {
-    // a gulp, pitched lower the more you have had
-    tone(300 - beers * 22, 0.12, 'sawtooth', 0.1, 150 - beers * 12);
-    noise(0.09, 0.1, 900);
-    say(SOBRIETY[beers] + '  +' + Math.round(beers * 15) + '% SCORE', C.gold, 46);
+    // a fizzy slurp, pitched higher the more you have had
+    tone(420 + sugar * 55, 0.1, 'square', 0.09, 780 + sugar * 70);
+    noise(0.07, 0.08, 2600);
+    say(SUGAR_LEVEL[sugar] + '  +' + Math.round(sugar * 15) + '% SCORE', C.gold, 46);
   }
 }
 canvas.addEventListener('pointerdown', e => {
   e.preventDefault();
   const [x, y] = canvasPos(e);
-  if (inBeerBtn(x, y)) { audio(); drinkBeer(); return; }   // never counts as a swing
+  if (inSugarBtn(x, y)) { audio(); takeSugar(); return; }   // never counts as a swing
   pressed = true; down();
 });
 canvas.addEventListener('pointermove', e => {
   const [x, y] = canvasPos(e);
-  canvas.style.cursor = inBeerBtn(x, y) ? 'pointer' : 'default';
+  canvas.style.cursor = inSugarBtn(x, y) ? 'pointer' : 'default';
 });
 addEventListener('pointerup', e => { if (pressed) { pressed = false; up(); } });
 addEventListener('blur', () => { if (pressed) { pressed = false; up(); } });
@@ -535,10 +535,10 @@ function release() {
   const t2 = Math.sqrt(2 * (DROP_LINE - apex) / GRAVITY);
   const live = Math.max(8, t2 - t1);
   /* Normally the cap keeps the top grade reachable while a floor guarantees a
-     full turn, so no throw is ungrippable. Once drink has shrunk the corridor
+     full turn, so no throw is ungrippable. Once sugar has shrunk the corridor
      to a few frames that promise is geometrically impossible — honouring it
      would spin the hammer into an unreadable blur — so the floor itself is
-     bounded, and a very drunk throw simply offers whatever arc it offers. */
+     bounded, and a very wired throw simply offers whatever arc it offers. */
   const cap = clamp(380 / live, spinCap(), 17);
   h.spin = clamp(sweepFor(g.power) / live, 5, cap)
          * rand(0.93, 1.07)                       // phases the arc differently each throw
@@ -571,8 +571,8 @@ function attemptCatch() {
 
   /* The grip decides how much room you get on the swing. Square in the hand and
      the nail is hard to miss; cocked over and you are threading a needle.
-     Drink and every band tightens around you. */
-  const k = boozeGrip();
+     Load up on sugar and every band tightens around you. */
+  const k = sugarGrip();
   if (a <= 12 * k)      g.grade = { name: 'PERFECT',  depth: 34, win: .42, core: .130, bend: 0, col: C.gold,    pts: 300 };
   else if (a <= 28 * k) g.grade = { name: 'SOLID',    depth: 23, win: .30, core: .090, bend: 0, col: C.good,    pts: 180 };
   else if (a <= 55 * k) g.grade = { name: 'OFF-TRUE', depth: 14, win: .19, core: .055, bend: 0, col: C.white,   pts: 80  };
@@ -636,7 +636,7 @@ function strike() {
   if (res === 'miss') g.combo = 0;
   else if (res === 'core' && gr.depth >= 14) g.combo++;
   const mult = 1 + Math.min(4, g.combo) * 0.5;
-  const pts = Math.round((gr.pts * (res === 'core' ? 1 : 0.5) + dep * 6) * mult * powMul * boozeBonus());
+  const pts = Math.round((gr.pts * (res === 'core' ? 1 : 0.5) + dep * 6) * mult * powMul * sugarBonus());
 
   const ny = nailTopY();
   if (dep > 0.5) {
@@ -736,8 +736,8 @@ function update() {
       const a = g.aim;
       a.t++;
       a.base = Math.min(1, a.t / a.frames);
-      // a drunk hand wanders; two slow sines read as a sway, not as static
-      const sway = boozeSway() *
+      // a jittery hand wanders; two slow sines read as a sway, not as static
+      const sway = sugarSway() *
         (Math.sin(a.t * 0.29 + a.ph1) * 0.62 + Math.sin(a.t * 0.61 + a.ph2) * 0.38);
       a.pos = clamp(a.base + sway, 0, 1);
       if (a.t % 5 === 0) SFX.sweep();
@@ -1010,28 +1010,28 @@ function drawGripDial(x, y, ang, label) {
   if (label) textO(label, x - textW(label) / 2, y + r + 3, C.white);
 }
 
-/* The sobriety counter. Click it to sink one; click at the bottom to sober up. */
+/* The sugar counter. Click it for another hit; click at the top to crash back down. */
 /* sits clear of the swing meter, which starts at x=54 */
-const BEER_BTN = { x: 2, y: 188, w: 50, h: 32 };
-const inBeerBtn = (x, y) =>
-  x >= BEER_BTN.x && x < BEER_BTN.x + BEER_BTN.w &&
-  y >= BEER_BTN.y && y < BEER_BTN.y + BEER_BTN.h;
+const SUGAR_BTN = { x: 2, y: 188, w: 50, h: 32 };
+const inSugarBtn = (x, y) =>
+  x >= SUGAR_BTN.x && x < SUGAR_BTN.x + SUGAR_BTN.w &&
+  y >= SUGAR_BTN.y && y < SUGAR_BTN.y + SUGAR_BTN.h;
 
-function drawBeerButton() {
-  const b = BEER_BTN, atMax = beers >= BEER_MAX;
+function drawSugarButton() {
+  const b = SUGAR_BTN, atMax = sugar >= SUGAR_MAX;
   R(b.x, b.y, b.w, b.h, C.ink);
-  R(b.x + 1, b.y + 1, b.w - 2, b.h - 2, beers ? '#3a2a18' : C.panel);
-  R(b.x + 1, b.y + 1, b.w - 2, 1, beers ? '#5a4020' : '#32324c');   // bevel
+  R(b.x + 1, b.y + 1, b.w - 2, b.h - 2, sugar ? '#3a1c26' : C.panel);
+  R(b.x + 1, b.y + 1, b.w - 2, 1, sugar ? '#5e2c3e' : '#32324c');   // bevel
   R(b.x + 1, b.y + b.h - 2, b.w - 2, 1, C.black);
 
-  ctx.drawImage(MUG, b.x + 3, b.y + 3);
-  const cnt = 'X' + beers;
-  text(cnt, b.x + 19, b.y + 5, atMax ? C.bad : beers ? C.gold : C.dim);
-  if (beers) text('+' + Math.round(beers * 15) + '%', b.x + 19, b.y + 13, C.good);
+  ctx.drawImage(CUP, b.x + 3, b.y + 3);
+  const cnt = 'X' + sugar;
+  text(cnt, b.x + 19, b.y + 5, atMax ? C.bad : sugar ? C.gold : C.dim);
+  if (sugar) text('+' + Math.round(sugar * 15) + '%', b.x + 19, b.y + 13, C.good);
 
-  // sobriety word, or a nudge that another tap sobers you up
-  const word = (atMax && (g.t >> 4) % 2 === 0) ? 'SOBER?' : SOBRIETY[beers];
-  const col = beers >= 5 ? C.bad : beers >= 3 ? C.handleL : beers ? C.gold : C.dim;
+  // sugar-level word, or a nudge that another tap crashes you back to steady
+  const word = (atMax && (g.t >> 4) % 2 === 0) ? 'RESET?' : SUGAR_LEVEL[sugar];
+  const col = sugar >= 5 ? C.bad : sugar >= 3 ? C.handleL : sugar ? C.gold : C.dim;
   text(word, b.x + ((b.w - textW(word)) / 2 | 0), b.y + b.h - 9, col);
 }
 
@@ -1183,8 +1183,8 @@ function draw() {
   if (sh > 0.4) ctx.translate(Math.round(rand(-sh, sh)), Math.round(rand(-sh, sh)));
 
   // the counter is a setting, so it stays reachable on every screen
-  if (g.state === S.TITLE) { drawTitle(); drawBeerButton(); ctx.restore(); return; }
-  if (g.state === S.OVER) { drawOver(); drawBeerButton(); ctx.restore(); return; }
+  if (g.state === S.TITLE) { drawTitle(); drawSugarButton(); ctx.restore(); return; }
+  if (g.state === S.OVER) { drawOver(); drawSugarButton(); ctx.restore(); return; }
 
   drawScene();
   drawHUD();
@@ -1215,7 +1215,7 @@ function draw() {
   }
 
   drawSwingMeter();
-  drawBeerButton();
+  drawSugarButton();
 
   if (g.tooEarly > 0) textO('TOO EARLY', HAND_X - textW('TOO EARLY') / 2, 106, C.white);
 
@@ -1266,9 +1266,9 @@ fit();
 window.STUMP = { step: n => { for (let i = 0; i < (n || 1); i++) update(); draw(); },
                  tick: n => { for (let i = 0; i < (n || 1); i++) update(); },
                  get g() { return g; }, S, down, up, reset: newGame,
-                 get beers() { return beers; },
-                 setBeers: n => { beers = clamp(n | 0, 0, BEER_MAX); },
-                 BEER_BTN, canvasPos };
+                 get sugar() { return sugar; },
+                 setSugar: n => { sugar = clamp(n | 0, 0, SUGAR_MAX); },
+                 SUGAR_BTN, canvasPos };
 
 let last = performance.now(), acc = 0;
 const STEP = 1000 / 60;
