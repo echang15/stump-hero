@@ -407,7 +407,7 @@ let g = null;
 function newGame() {
   g = {
     state: S.TITLE, t: 0, score: 0, lives: 3, level: 1, combo: 0, best: bestScore(),
-    depth: 0, bends: 0, nailX: NAIL_X,
+    depth: 0, bends: 0, nailX: NAIL_X, bonusStrikes: 0,
     charge: 0, power: 0,
     ham: { x: HAND_X, y: HAND_Y, vy: 0, a: 0, spin: 0 }, catchPos: [HAND_X, HAND_Y],
     grip: 0, grade: null, aim: null, swingT: 0, struck: false,
@@ -568,6 +568,16 @@ function attemptCatch() {
   g.hand = reachTo(h.x, h.y);
   g.flash = 4;
   burst(h.x, h.y, 8, [C.white, C.gold], 1.6, 16, 0.08);
+
+  /* Ride it round more than once before you grab it and the extra turns
+     aren't wasted — each full spin past the first buys one more free
+     swing at the nail with this same grip, no re-throw required. */
+  g.bonusStrikes = Math.max(0, Math.floor(Math.abs(h.a) / 360) - 1);
+  if (g.bonusStrikes > 0) {
+    const bstr = '+' + g.bonusStrikes + ' BONUS STRIKE' + (g.bonusStrikes > 1 ? 'S' : '');
+    float(bstr, h.x, h.y - 20, C.gold, 1, 70);
+    SFX.core();
+  }
 
   /* The grip decides how much room you get on the swing. Square in the hand and
      the nail is hard to miss; cocked over and you are threading a needle.
@@ -792,12 +802,18 @@ function update() {
       g.hand = [HAND_X, HAND_Y];
       if (g.t > 14) {
         if (g.depth >= depthNeed()) {
+          g.bonusStrikes = 0;
           g.state = S.CLEAR; g.t = 0; g.clearT = 0;
           const bonus = 500 + g.level * 150 + Math.max(0, 3 - g.bends) * 200;
           g.score += bonus;
           say('NAIL DRIVEN!  +' + bonus, C.gold, 999);
           SFX.level();
           burst(g.nailX, NAIL_Y, 26, [C.gold, C.white, C.wood1], 3, 40);
+        } else if (g.bonusStrikes > 0) {
+          // still holding the same catch — spend a spin-earned swing instead of a fresh throw
+          g.bonusStrikes--;
+          armSwing();
+          float('BONUS STRIKE', HAND_X, HAND_Y - 28, C.gold, 1, 45);
         } else {
           g.state = S.READY; g.t = 0;
         }
@@ -1211,6 +1227,10 @@ function draw() {
       if (g.t < 22) textCO(g.grade.name, 100, g.grade.col, 2);
     } else {
       textO(g.grade.name, dx - textW(g.grade.name) / 2, dy + 24, g.grade.col);
+    }
+    if (g.bonusStrikes > 0) {
+      const bstr = 'BONUS X' + g.bonusStrikes;
+      textO(bstr, dx - textW(bstr) / 2, dy + 33, C.gold);
     }
   }
 
